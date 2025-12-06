@@ -6,16 +6,9 @@
 #include "utils.h"
 #include "connection.h"
 
-/* Uncomment to enable debug messages. */
+
 //#define DEBUG
 
-/*
- This is a modified version of Lab 5 game, which now includes message history for each connection and
- interpolation of player positions on the observer-side.
- The player connects to the Observer, and sends updates about its tank position.
- The Observer accepts multiple connections from players, receives their tank position updates,
- and interpolates the tank positions based on message history to provide smooth movement.
-*/
 
 int main() {
 	bool is_observer = false;
@@ -212,12 +205,12 @@ int main() {
 							+ std::to_string(player_connections[i].socket->getRemotePort()), warning);
 
 						// For now just set the connection state to Disconnected. 
-						// FIXME: But we should also remove the inactive connection from the vector and remove the tank from the game.
+						
 						player_connections[i].state = Disconnected;
 						game.RemoveTank();
 					}
 				}
-				// NOTE: Moved player update here, as we want to update every time, not just when we recieve messages.
+				
 				if (!player_connections[i].message_history.empty()) {
 #ifdef DEBUG
 					Utils::printMsg("dt = " + std::to_string(dt) + ", Inter t = " + std::to_string(player_connections[i].inter_t), MessageType::info);
@@ -243,12 +236,10 @@ int main() {
 		else // PLAYER
 		{
 			// If we're not connected to the observer, try to connect.
-			// We want the socket in non-blocking mode, so if the connection fails, we just try again next time.
+			
 			if (!is_connected) {
 				Utils::printMsg("Attempting connection to observer...");
-				// SFML TCP sockets are fiddly when it comes to non-blocking connect calls,
-				// we could specify a very small delay timeout in the blocking mode, but this would cause lag while it tries.
-				// Ideally, we just handle connection in blocking mode, and wait for a successful connection before we continue.
+			
 				sf::Socket::Status status = player_socket->connect(sf::IpAddress::LocalHost, observer_port);
 				if (status == sf::Socket::Status::Done) {
 					Utils::printMsg("Connected!", MessageType::success);
