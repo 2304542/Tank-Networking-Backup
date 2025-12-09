@@ -14,7 +14,7 @@ public:
 	// Network update now gets a collection of tank messages for multiple tanks.
 	void NetworkUpdate(float dt, TankMessage tData);
 	void Render(sf::RenderWindow& window);
-	void AddTank(std::string body_tex, std::string barrel_tex, sf::Vector2f position);
+	void AddTank(std::int32_t body_tex, std::int32_t barrel_tex, sf::Vector2f position);
 	void RemoveTank();
 	void AddProjectile(std::string projectile_tex, sf::Vector2f direction, sf::Vector2f position);
 	TankMessage GetNetworkUpdate();
@@ -26,7 +26,7 @@ private:
 	std::unique_ptr<sf::Sprite> background;
 	// We'll hold all textures here so we only need to load them once at game creation.
 	std::unordered_map<std::string, std::shared_ptr<sf::Texture>> textures;
-	//std::unordered_map<std::int32_t, std::shared_ptr<sf::Texture>> playerTextures;
+	std::unordered_map<std::int32_t, std::shared_ptr<sf::Texture>> playerTextures;
 
 };
 

@@ -17,12 +17,12 @@ void Game::LoadTextures() {
 	textures["ground_sand"]->setRepeated(true);
 	textures["cannonball"] = std::make_shared<sf::Texture>("Assets/Cannonball.png");
 
-	textures["barrel_black"] = std::make_shared<sf::Texture>("Assets/blackBarrel.png");
-	textures["body_black"] = std::make_shared<sf::Texture>("Assets/blackTank.png");
-	textures["barrel_blue"] = std::make_shared<sf::Texture>("Assets/blueBarrel.png");
-	textures["body_blue"] = std::make_shared<sf::Texture>("Assets/blueTank.png");
-	textures["barrel_green"] = std::make_shared<sf::Texture>("Assets/greenBarrel.png");
-	textures["barrel_green"] = std::make_shared<sf::Texture>("Assets/greenTank.png");
+	playerTextures[0] = std::make_shared<sf::Texture>("Assets/blackBarrel.png");
+	playerTextures[0] = std::make_shared<sf::Texture>("Assets/blackTank.png");
+	playerTextures[1] = std::make_shared<sf::Texture>("Assets/blueBarrel.png");
+	playerTextures[1] = std::make_shared<sf::Texture>("Assets/blueTank.png");
+	playerTextures[2] = std::make_shared<sf::Texture>("Assets/greenBarrel.png");
+	playerTextures[2] = std::make_shared<sf::Texture>("Assets/greenTank.png");
 }
 
 void Game::FireBullet() {
@@ -140,9 +140,9 @@ void Game::Render(sf::RenderWindow& window)
 		projectiles.at(j)->Render(window);
 	}
 }
-void Game::AddTank(std::string body_tex, std::string barrel_tex, sf::Vector2f position)
+void Game::AddTank(std::int32_t body_tex, std::int32_t barrel_tex, sf::Vector2f position)
 {
-	std::unique_ptr<Tank> tank = std::make_unique<Tank>(Tank(textures[body_tex], textures[barrel_tex]));
+	std::unique_ptr<Tank> tank = std::make_unique<Tank>(Tank(playerTextures[body_tex], playerTextures[barrel_tex]));
 	tank->position = position;
 
 

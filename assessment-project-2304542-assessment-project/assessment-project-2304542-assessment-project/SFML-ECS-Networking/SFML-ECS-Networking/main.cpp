@@ -140,7 +140,9 @@ int main() {
 				// Add new tank with blue body and black barrel at the centre of the window.
 				// FIXME: Ideally we should wait until the first receive gets some data about the trank
 				// position and colour before we add it to the Observer's game.
-				game.AddTank("body_blue", "barrel_black", { 320, 240 });
+				for (int i = 0; i < player_connections.size(); i++) {
+					game.AddTank(i, i, { 320, 240 });
+				}
 				//game.AddProjectile("cannonball", { 320, 240 });
 			}
 
@@ -262,7 +264,9 @@ int main() {
 					Utils::printMsg("Connected!", MessageType::success);
 					is_connected = true;
 					// Add new tank with blue body and black barrel at the centre of the window.
-					game.AddTank("body_blue", "barrel_black", { 320, 240 });
+					for (int i = 0; i < player_connections.size(); i++) {
+						game.AddTank(i, i, { 320, 240 });
+					}
 					//game.AddProjectile("cannonball", { 320, 240 });
 				}
 				else {
