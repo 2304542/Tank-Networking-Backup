@@ -11,6 +11,9 @@ Tank::Tank(std::shared_ptr<sf::Texture> bodyTexture, std::shared_ptr<sf::Texture
 	body->setOrigin((sf::Vector2f)body->getTextureRect().getCenter());
 	barrel->setOrigin({ 6, 2 });
 
+	// Collision setup
+	//body->getGlobalBounds();
+
 	// With the correct offset on the barrel, we can just set barrel position = body position.
 	body->setPosition(position);
 	barrel->setPosition(body->getPosition());
@@ -19,7 +22,7 @@ Tank::Tank(std::shared_ptr<sf::Texture> bodyTexture, std::shared_ptr<sf::Texture
 	body->setRotation(bodyRotation);
 	barrel->setRotation(barrelRotation);
 
-	
+
 }
 
 
@@ -56,12 +59,15 @@ void Tank::Update(float dt)
 	// Apply new rotation to tank body and barrel.
 	body->setRotation(bodyRotation);
 	barrel->setRotation(barrelRotation);
-	
+
 
 	// Apply new position to tank body and barrel.
 	body->setPosition(position);
 	barrel->setPosition(position);
+
 }
+
+
 
 const void Tank::Render(sf::RenderWindow& window) {
 	window.draw(*body);

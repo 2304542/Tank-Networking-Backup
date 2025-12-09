@@ -19,7 +19,7 @@ struct Connection
 	ConnState state = Disconnected;
 	PredictionMethod prediction = Linear;
 	std::deque<TankMessage> message_history;
-	
+
 	float inter_t = 0.f; // This value goes from 0.f to 1.f during interpolation and will be accumulated based on time delta.
 
 	// Interpolate position based on selected method and value of t. Return TankMessage with updated position.
@@ -38,11 +38,11 @@ struct Connection
 		// Clamp inter_t to max of 1.f
 		if (inter_t > 1.f)
 			inter_t = 1.f;
-		
+
 		if (message_history.size() > 1) { // Make sure we have at least 2 messages for Linear interpolation.
 			// Calculate new position by interpolating between last two known positons.
 			return (message_history[1].position + (message_history[0].position - message_history[1].position) * inter_t);
-			
+
 		}
 		else
 			return message_history[0].position; // Just return the last known position.
@@ -73,4 +73,28 @@ struct Connection
 			return message_history[0].rotation; // Just return the last known position.
 	}
 
-}; 
+	sf::Angle InterpolateAim(float dt) {
+		// Calculate interpolation step
+		float step = 0.f;
+
+		if (message_history.size() > 1) // Make sure we have at least 2 messages for Linear interpolation.
+			step = 1.f / ((message_history[0].time - message_history[1].time) / dt);
+		else
+			step = 0.f;
+
+		// Add step to inter_t
+		inter_t += step;
+
+		// Clamp inter_t to max of 1.f
+		if (inter_t > 1.f)
+			inter_t = 1.f;
+
+		if (message_history.size() > 1) { // Make sure we have at least 2 messages for Linear interpolation.
+			// Calculate new position by interpolating between last two known positons.
+			return message_history[0].aim + (message_history[0].aim - message_history[1].aim) * inter_t;
+		}
+		else
+			return message_history[0].aim; // Just return the last known position.
+	}
+
+};

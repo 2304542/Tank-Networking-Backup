@@ -6,15 +6,23 @@
 #include "utils.h"
 #include "connection.h"
 
-
+/* Uncomment to enable debug messages. */
 //#define DEBUG
 
+/*
+ This is a modified version of Lab 5 game, which now includes message history for each connection and
+ interpolation of player positions on the observer-side.
+ The player connects to the Observer, and sends updates about its tank position.
+ The Observer accepts multiple connections from players, receives their tank position updates,
+ and interpolates the tank positions based on message history to provide smooth movement.
+*/
 
 int main() {
 	bool is_observer = false;
 	unsigned short observer_port = 53000;
 	unsigned short player_port = sf::Socket::AnyPort;
-	float rotationAngle;
+	float rotationAngle; // tank rotation to be mapped to observer
+	float aimAngle; // barrel rotation
 	const int MAX_HISTORY = 3;
 
 	Utils::printMsg("Game startup...");
@@ -62,7 +70,7 @@ int main() {
 	if (listener.listen(port) == sf::Socket::Status::Error) {
 		Utils::printMsg("Failed to find port, please connect a player.", MessageType::warning);
 	}
-	
+
 	// Clock for timing the 'dt' value
 	sf::Clock clock;
 	float game_time = 0;
@@ -109,7 +117,7 @@ int main() {
 		}
 		// Packet to hold our updates.
 		sf::Packet packet;
-		
+
 
 		if (is_observer) { // OBSERVER
 			// Socket for communication with player
@@ -133,7 +141,7 @@ int main() {
 				// FIXME: Ideally we should wait until the first receive gets some data about the trank
 				// position and colour before we add it to the Observer's game.
 				game.AddTank("body_blue", "barrel_black", { 320, 240 });
-				game.AddProjectile("cannonball", { 320, 240 });
+				//game.AddProjectile("cannonball", { 320, 240 });
 			}
 
 			// Reset states before waiting to avoid stale Ready state causing a blocking receive.
@@ -148,7 +156,7 @@ int main() {
 						player_connections[i].state = Ready;
 				}
 			}
-			
+
 			// FIXME: we never remove disconnected players from the vector of connections. This will
 			// cause us to continue to update and draw them. Handle disconnections and fix this.
 			for (int i = 0; i < player_connections.size(); i++) {
@@ -167,10 +175,11 @@ int main() {
 						// Read recieved data into TankMessage struct.
 						// FIXME: reading from packet can fail. Refer to documentation on how to
 						// handle errors and add error checking here.
-						
-						packet >> message.time >> message.position.x >> message.position.y >> rotationAngle;
-						
 
+						packet >> message.time >> message.position.x >> message.position.y >> rotationAngle >> aimAngle;
+
+						message.rotation = sf::radians(rotationAngle);
+						message.aim = sf::radians(aimAngle);
 						player_connections[i].inter_t = 0.f; // reset interpolation t value when we get a new message
 
 						// Add message to the message_history
@@ -205,12 +214,15 @@ int main() {
 							+ std::to_string(player_connections[i].socket->getRemotePort()), warning);
 
 						// For now just set the connection state to Disconnected. 
-						
+						// FIXME: But we should also remove the inactive connection from the vector and remove the tank from the game.
 						player_connections[i].state = Disconnected;
 						game.RemoveTank();
 					}
+					else if (status == sf::Socket::Status::Error) {
+						sf::Socket::Status status = player_connections[i].socket->receive(packet);
+					}
 				}
-				
+				// NOTE: Moved player update here, as we want to update every time, not just when we recieve messages.
 				if (!player_connections[i].message_history.empty()) {
 #ifdef DEBUG
 					Utils::printMsg("dt = " + std::to_string(dt) + ", Inter t = " + std::to_string(player_connections[i].inter_t), MessageType::info);
@@ -218,16 +230,19 @@ int main() {
 					// Get actual position based on interpolation method.
 					sf::Vector2f interpolated_posTank = player_connections[i].InterpolatePosition(dt);
 					sf::Angle interpolated_rotTank = player_connections[i].InterpolateRotation(dt);
+					sf::Angle interpolated_aim = player_connections[i].InterpolateAim(dt);
 
 					// Construct message with actual positon.
 					TankMessage interpolated_msg = {
 						game_time,
 						player_connections[i].message_history[0].id,
 						interpolated_posTank,
-						interpolated_rotTank
-						
+						interpolated_rotTank,
+						interpolated_aim
+
+
 					};
-				
+
 					// Update game using message containign actual position update.
 					game.NetworkUpdate(dt, interpolated_msg);
 				}
@@ -236,16 +251,19 @@ int main() {
 		else // PLAYER
 		{
 			// If we're not connected to the observer, try to connect.
-			
+			// We want the socket in non-blocking mode, so if the connection fails, we just try again next time.
 			if (!is_connected) {
 				Utils::printMsg("Attempting connection to observer...");
-			
+				// SFML TCP sockets are fiddly when it comes to non-blocking connect calls,
+				// we could specify a very small delay timeout in the blocking mode, but this would cause lag while it tries.
+				// Ideally, we just handle connection in blocking mode, and wait for a successful connection before we continue.
 				sf::Socket::Status status = player_socket->connect(sf::IpAddress::LocalHost, observer_port);
 				if (status == sf::Socket::Status::Done) {
 					Utils::printMsg("Connected!", MessageType::success);
 					is_connected = true;
 					// Add new tank with blue body and black barrel at the centre of the window.
 					game.AddTank("body_blue", "barrel_black", { 320, 240 });
+					//game.AddProjectile("cannonball", { 320, 240 });
 				}
 				else {
 					Utils::printMsg("Failed to connect to observer. Will try again later.", MessageType::warning);
@@ -259,9 +277,10 @@ int main() {
 				// Add current game time to the message
 				message.time = game_time;
 				rotationAngle = message.rotation.asRadians();
+				aimAngle = message.aim.asRadians();
 				// Translate our messgage struct to sf::Packet (very rudimentary conversion).
-				packet << message.time << message.position.x << message.position.y << rotationAngle;
-				
+				packet << message.time << message.position.x << message.position.y << rotationAngle << aimAngle;
+
 				// Send messages only as often as the send rate allows.
 				if (send_timer >= send_rate) {
 					sf::Socket::Status status = player_socket->send(packet);
