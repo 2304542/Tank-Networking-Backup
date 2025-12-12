@@ -8,25 +8,42 @@ Game::Game()
 	background->setTextureRect(sf::IntRect({ 0, 0 }, { 640, 480 }));
 
 	// We're not loading the tank by default any more.
-	
+
 }
 
 
 void Game::LoadTextures() {
+
+	// textures for things that aren't tanks 
 	textures["ground_sand"] = std::make_shared<sf::Texture>("Assets/tileSand1.png");
 	textures["ground_sand"]->setRepeated(true);
-
-	textures["barrel_black"] = std::make_shared<sf::Texture>("Assets/blackBarrel.png");
-	textures["body_black"] = std::make_shared<sf::Texture>("Assets/blackTank.png");
-	textures["barrel_blue"] = std::make_shared<sf::Texture>("Assets/blueBarrel.png");
-	textures["body_blue"] = std::make_shared<sf::Texture>("Assets/blueTank.png");
-	textures["barrel_green"] = std::make_shared<sf::Texture>("Assets/greenBarrel.png");
-	textures["body_green"] = std::make_shared<sf::Texture>("Assets/greenTank.png");
 	textures["cannonball"] = std::make_shared<sf::Texture>("Assets/Cannonball.png");
+
+	// tank bodies
+	playerTextures[0] = std::make_shared<sf::Texture>("Assets/blackTank.png");
+	playerTextures[1] = std::make_shared<sf::Texture>("Assets/blueTank.png");
+	playerTextures[2] = std::make_shared<sf::Texture>("Assets/greenTank.png");
+	playerTextures[3] = std::make_shared<sf::Texture>("Assets/redTank.png");
+
+	// tank barrels
+	barrelTextures[0] = std::make_shared<sf::Texture>("Assets/blackBarrel.png");
+	barrelTextures[1] = std::make_shared<sf::Texture>("Assets/blueBarrel.png");
+	barrelTextures[2] = std::make_shared<sf::Texture>("Assets/greenBarrel.png");
+	barrelTextures[3] = std::make_shared<sf::Texture>("Assets/redBarrel.png");
+
+
 }
 
+void Game::FireBullet() {
+	sf::Vector2f shoot_direction = {
+
+			std::cos((tanks.at(0)->barrelRotation - sf::degrees(90)).asRadians()),
+			std::sin((tanks.at(0)->barrelRotation - sf::degrees(90)).asRadians())
+	};
+	AddProjectile("cannonball", tanks.at(0)->position, -shoot_direction);
+}
 void Game::HandleEvents(const std::optional<sf::Event> event)
-{ 
+{
 	// Handle key press events passed from window.
 	if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>()) {
 		if (keyPressed->scancode == sf::Keyboard::Scancode::W) {
@@ -53,7 +70,8 @@ void Game::HandleEvents(const std::optional<sf::Event> event)
 			tanks.at(0)->isRotating.clockwise = false;
 			tanks.at(0)->isRotating.counterclockwise = true;
 		}
-		if (keyPressed->scancode == sf::Keyboard::Scancode::Space) { 
+		if (keyPressed->scancode == sf::Keyboard::Scancode::Space) {
+			FireBullet();
 			projectiles.at(0)->isFired = true;
 		}
 	}
@@ -72,42 +90,61 @@ void Game::HandleEvents(const std::optional<sf::Event> event)
 			tanks.at(0)->isRotating.clockwise = false;
 		if (keyReleased->scancode == sf::Keyboard::Scancode::E)
 			tanks.at(0)->isRotating.counterclockwise = false;
-		if (keyReleased->scancode == sf::Keyboard::Scancode::Space) {
-			projectiles.at(0)->isFired = false;
-		}
+
 	}
 
-	
+
+}
+
+int Game::HandleCollision() {
+
+	for (int i = 0; i < tanks.size(); i++) {
+		for (int j = 0; j < projectiles.size(); j++) {
+			if (projectiles[j].get()->projectile.get()->getGlobalBounds().findIntersection(tanks[i].get()->body.get()->getGlobalBounds())) {
+				int playerID = tanks[i]->playerID;
+				tanks.erase(tanks.begin() + i);
+				projectiles.erase(projectiles.begin() + j);
+				return playerID;
+				break;
+			}
+		}
+	}
 }
 
 void Game::Update(float dt)
 {
 	for (int i = 0; i < tanks.size(); i++) {
-		tanks.at(0)->Update(dt);
+		tanks.at(i)->Update(dt);
 	}
 	for (int j = 0; j < projectiles.size(); j++) {
-		projectiles.at(0)->Update(dt);
+		projectiles.at(j)->Update(dt);
 	}
-	
+
 }
 
 void Game::NetworkUpdate(float dt, TankMessage tData) {
 	// Force position updates from network data.
 	tanks.at(tData.id)->position = tData.position;
 	tanks.at(tData.id)->bodyRotation = tData.rotation;
+	tanks.at(tData.id)->barrelRotation = tData.aim;
 	// Update tank with new position.
 	// NOTE: This assumets no inputs were detected and so the tank will only move according to 
 	// network updates. This is not ideal and prone to unexpected behaviour if game is extended
 	// to be fully multiplayer. 
 	tanks.at(tData.id)->Update(dt);
-	
-	
-	
+
+	if (projectiles.size() > 0) {
+		projectiles.at(tData.id)->projectilePosition = tData.projectilePosition;
+		projectiles.at(tData.id)->Update(dt);
+	}
+
+
+
 }
 
 void Game::Render(sf::RenderWindow& window)
 {
-	
+
 	window.draw(*background);
 	for (int i = 0; i < tanks.size(); i++) {
 		tanks.at(i)->Render(window);
@@ -116,31 +153,46 @@ void Game::Render(sf::RenderWindow& window)
 		projectiles.at(j)->Render(window);
 	}
 }
-void Game::AddTank(std::string body_tex, std::string barrel_tex, sf::Vector2f position)
+void Game::AddTank(std::int32_t body_tex, std::int32_t barrel_tex, sf::Vector2f position)
 {
-	std::unique_ptr<Tank> tank = std::make_unique<Tank>(Tank(textures[body_tex], textures[barrel_tex]));
+	// replace with playerTextures
+	std::unique_ptr<Tank> tank = std::make_unique<Tank>(Tank(playerTextures[body_tex], barrelTextures[barrel_tex]));
 	tank->position = position;
-	
-	
+
+
 	tanks.push_back(std::move(tank));
 }
 
 void Game::RemoveTank()
 {
-	tanks.pop_back();
+	for (int i = 0; i < tanks.size(); i++) {
+		tanks.erase(tanks.begin() + i);
+	}
 }
 
-void Game::AddProjectile(std::string projectile_tex, sf::Vector2f position)
+void Game::AddProjectile(std::string projectile_tex, sf::Vector2f direction, sf::Vector2f position)
 {
-	std::unique_ptr<Projectile> projectile = std::make_unique<Projectile>(Projectile(textures[projectile_tex]));
-	projectile->projectilePosition = position;
+	std::unique_ptr<Projectile> projectile = std::make_unique<Projectile>(textures[projectile_tex]);
+	projectile->projectilePosition = direction;
+	projectile->projectileSpawn = position;
 
 	projectiles.push_back(std::move(projectile));
 }
 
 TankMessage Game::GetNetworkUpdate()
 {
-	return { -1.f, 0, tanks.at(0)->position, tanks.at(0)->bodyRotation };
+
+	if (projectiles.size() > 0 && projectiles.at(0)->isFired) {
+
+		return { -1.f, 0, tanks.at(0)->position, tanks.at(0)->bodyRotation, tanks.at(0)->barrelRotation, projectiles.at(0)->projectilePosition };
+	}
+	else {
+		for (int i = 0; i < tanks.size(); i++) {
+			return { -1.f, 0, tanks.at(i)->position, tanks.at(i)->bodyRotation, tanks.at(i)->barrelRotation };
+		}
+	}
+
+
 }
 
 

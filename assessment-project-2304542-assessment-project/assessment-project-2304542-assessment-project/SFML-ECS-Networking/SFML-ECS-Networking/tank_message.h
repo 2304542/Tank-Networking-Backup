@@ -9,6 +9,7 @@ struct TankMessage {
 	// Changed position to a vector2 for ease of interpolation calculations
 	sf::Vector2f position = { 0.f, 0.f };
 	sf::Angle rotation = sf::radians(0);
-	
-	
+	sf::Angle aim = sf::radians(0);
+	sf::Vector2f projectilePosition = { 0.f, 0.f };
+
 };

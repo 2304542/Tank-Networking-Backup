@@ -21,7 +21,8 @@ int main() {
 	bool is_observer = false;
 	unsigned short observer_port = 53000;
 	unsigned short player_port = sf::Socket::AnyPort;
-	float rotationAngle;
+	float rotationAngle; // tank rotation to be mapped to observer
+	float aimAngle; // barrel rotation
 	const int MAX_HISTORY = 3;
 
 	Utils::printMsg("Game startup...");
@@ -69,7 +70,7 @@ int main() {
 	if (listener.listen(port) == sf::Socket::Status::Error) {
 		Utils::printMsg("Failed to find port, please connect a player.", MessageType::warning);
 	}
-	
+
 	// Clock for timing the 'dt' value
 	sf::Clock clock;
 	float game_time = 0;
@@ -116,7 +117,7 @@ int main() {
 		}
 		// Packet to hold our updates.
 		sf::Packet packet;
-		
+
 
 		if (is_observer) { // OBSERVER
 			// Socket for communication with player
@@ -139,8 +140,10 @@ int main() {
 				// Add new tank with blue body and black barrel at the centre of the window.
 				// FIXME: Ideally we should wait until the first receive gets some data about the trank
 				// position and colour before we add it to the Observer's game.
-				game.AddTank("body_blue", "barrel_black", { 320, 240 });
-				game.AddProjectile("cannonball", { 320, 240 });
+				for (int i = 0; i <= player_connections.size(); i++) {
+					game.AddTank(i, i, { 320, 240 });
+				}
+				//game.AddProjectile("cannonball", { 320, 240 });
 			}
 
 			// Reset states before waiting to avoid stale Ready state causing a blocking receive.
@@ -155,7 +158,7 @@ int main() {
 						player_connections[i].state = Ready;
 				}
 			}
-			
+
 			// FIXME: we never remove disconnected players from the vector of connections. This will
 			// cause us to continue to update and draw them. Handle disconnections and fix this.
 			for (int i = 0; i < player_connections.size(); i++) {
@@ -174,10 +177,11 @@ int main() {
 						// Read recieved data into TankMessage struct.
 						// FIXME: reading from packet can fail. Refer to documentation on how to
 						// handle errors and add error checking here.
-						
-						packet >> message.time >> message.position.x >> message.position.y >> rotationAngle;
-						
 
+						packet >> message.time >> message.position.x >> message.position.y >> rotationAngle >> aimAngle >> message.projectilePosition.x >> message.projectilePosition.y;
+
+						message.rotation = sf::radians(rotationAngle);
+						message.aim = sf::radians(aimAngle);
 						player_connections[i].inter_t = 0.f; // reset interpolation t value when we get a new message
 
 						// Add message to the message_history
@@ -216,26 +220,34 @@ int main() {
 						player_connections[i].state = Disconnected;
 						game.RemoveTank();
 					}
+					else if (status == sf::Socket::Status::Error) {
+						sf::Socket::Status status = player_connections[i].socket->receive(packet);
+					}
 				}
 				// NOTE: Moved player update here, as we want to update every time, not just when we recieve messages.
 				if (!player_connections[i].message_history.empty()) {
 #ifdef DEBUG
 					Utils::printMsg("dt = " + std::to_string(dt) + ", Inter t = " + std::to_string(player_connections[i].inter_t), MessageType::info);
 #endif // DEBUG
-					// Get actual position based on interpolation method.
-					sf::Vector2f interpolated_posTank = player_connections[i].InterpolatePosition(dt);
-					sf::Angle interpolated_rotTank = player_connections[i].InterpolateRotation(dt);
+					// calls interpolation functions
+					sf::Vector2f interpolated_posTank = player_connections[i].InterpolatePosition(dt); // position
+					sf::Angle interpolated_rotTank = player_connections[i].InterpolateRotation(dt); // tank body rotation
+					sf::Angle interpolated_aim = player_connections[i].InterpolateAim(dt); // barrel rotation
+					sf::Vector2f interpolated_bullet = player_connections[i].InterpolateProjectiles(dt);
 
 					// Construct message with actual positon.
 					TankMessage interpolated_msg = {
 						game_time,
 						player_connections[i].message_history[0].id,
 						interpolated_posTank,
-						interpolated_rotTank
-						
+						interpolated_rotTank,
+						interpolated_aim,
+						interpolated_bullet
+
+
 					};
-				
-					// Update game using message containign actual position update.
+
+					// Update game using message containing position and rotation
 					game.NetworkUpdate(dt, interpolated_msg);
 				}
 			}
@@ -244,6 +256,27 @@ int main() {
 		{
 			// If we're not connected to the observer, try to connect.
 			// We want the socket in non-blocking mode, so if the connection fails, we just try again next time.
+			if (listener.accept(*player_socket) == sf::Socket::Status::Done) {
+				Utils::printMsg("New connection from: "
+					+ player_socket->getRemoteAddress().value().toString()
+					+ ":"
+					+ std::to_string(player_socket->getRemotePort()));
+
+				// Add connection the vector.
+				player_connections.push_back({ std::move(player_socket) });
+				selector.add(*player_connections.back().player_socket); // Add to persistent selector
+				player_connections.back().player_socket->setBlocking(false);
+				// Set the deafult connection state to NotReady.
+				player_connections.back().state = NotReady;
+
+				// Add new tank with blue body and black barrel at the centre of the window.
+				// FIXME: Ideally we should wait until the first receive gets some data about the trank
+				// position and colour before we add it to the Observer's game.
+				for (int i = 0; i <= player_connections.size(); i++) {
+					game.AddTank(i, i, { 320, 240 });
+				}
+				//game.AddProjectile("cannonball", { 320, 240 });
+			}
 			if (!is_connected) {
 				Utils::printMsg("Attempting connection to observer...");
 				// SFML TCP sockets are fiddly when it comes to non-blocking connect calls,
@@ -253,8 +286,11 @@ int main() {
 				if (status == sf::Socket::Status::Done) {
 					Utils::printMsg("Connected!", MessageType::success);
 					is_connected = true;
-					// Add new tank with blue body and black barrel at the centre of the window.
-					game.AddTank("body_blue", "barrel_black", { 320, 240 });
+					// Add new player tank
+					for (int i = 0; i <= player_connections.size(); i++) {
+						game.AddTank(i, i, { 320, 240 });
+					}
+
 				}
 				else {
 					Utils::printMsg("Failed to connect to observer. Will try again later.", MessageType::warning);
@@ -268,20 +304,25 @@ int main() {
 				// Add current game time to the message
 				message.time = game_time;
 				rotationAngle = message.rotation.asRadians();
+				aimAngle = message.aim.asRadians();
 				// Translate our messgage struct to sf::Packet (very rudimentary conversion).
-				packet << message.time << message.position.x << message.position.y << rotationAngle;
-				
+				packet << message.time << message.position.x << message.position.y << rotationAngle << aimAngle << message.projectilePosition.x << message.projectilePosition.y;;
+				// Add message to the message_history
+
 				// Send messages only as often as the send rate allows.
 				if (send_timer >= send_rate) {
+
 					sf::Socket::Status status = player_socket->send(packet);
 					// FIXME: Send can fail, check for errors and adjust logic accordingly.
 					if (status == sf::Socket::Status::Done) {
-#ifdef DEBUG
+#ifdef DEBUG			
 						Utils::printMsg("Sent message to: "
 							+ player_socket->getRemoteAddress().value().toString()
-							+ ":"
-							+ std::to_string(observer_port));
-#endif // DEBUG
+
+
+
+#endif // DEBUG		
+
 					}
 					else { // attempts to reconnect if observer leaves prematurely 
 						Utils::printMsg("Failed to send message to Observer", error);
@@ -290,6 +331,73 @@ int main() {
 					}
 					// Reset timer after sending the message
 					send_timer = 0;
+
+
+				}
+				for (int i = 0; i < player_connections.size(); i++) {
+					// FIXME: Recieve can fail, check for errors.
+					if (player_connections[i].state == Ready) {
+						sf::Socket::Status status = player_connections[i].player_socket->receive(packet);
+						if (status == sf::Socket::Status::Done) {
+#ifdef DEBUG
+							Utils::printMsg("Recieved message from: "
+								+ player_connections[i].socket->getRemoteAddress().value().toString()
+								+ ":"
+								+ std::to_string(player_connections[i].socket->getRemotePort()));
+#endif // DEBUG
+							TankMessage message;
+							message.id = i;
+							// Read recieved data into TankMessage struct.
+							// FIXME: reading from packet can fail. Refer to documentation on how to
+							// handle errors and add error checking here.
+
+							packet >> message.time >> message.position.x >> message.position.y >> rotationAngle >> aimAngle >> message.projectilePosition.x >> message.projectilePosition.y;
+
+							message.rotation = sf::radians(rotationAngle);
+							message.aim = sf::radians(aimAngle);
+							player_connections[i].inter_t = 0.f; // reset interpolation t value when we get a new message
+
+							// Add message to the message_history
+							player_connections[i].message_history.push_front(message); // newest message added to the front
+							if (player_connections[i].message_history.size() > MAX_HISTORY) {
+								player_connections[i].message_history.pop_back(); // remove the oldest message at the back
+							}
+#ifdef DEBUG
+							//For DEBUG ONLY, pring current message history. Remove this when no longer needed!
+							std::string history_msg = "Current queue: \n";
+							for (int m = 0; m < player_connections[i].message_history.size(); m++) {
+								history_msg.append("\t\t{ Time: ");
+								history_msg.append(std::to_string(player_connections[i].message_history[m].time));
+								history_msg.append(", X: ");
+								history_msg.append(std::to_string(player_connections[i].message_history[m].position.x));
+								history_msg.append(", Y: ");
+								history_msg.append(std::to_string(player_connections[i].message_history[m].position.y));
+								history_msg.append(" }");
+								history_msg.append(std::to_string(player_connections[i].message_history[m].rotationAngle));
+								history_msg.append(" }");
+								if (i != (player_connections[i].message_history.size() - 1))
+									history_msg.append("\n");
+							}
+
+							Utils::printMsg(history_msg, MessageType::debug);
+#endif // DEBUG
+						}
+						else if (status == sf::Socket::Status::Disconnected) {
+							Utils::printMsg("Player disconnected: "
+								+ player_connections[i].player_socket->getRemoteAddress().value().toString()
+								+ ":"
+								+ std::to_string(player_connections[i].player_socket->getRemotePort()), warning);
+
+							// For now just set the connection state to Disconnected. 
+							// FIXME: But we should also remove the inactive connection from the vector and remove the tank from the game.
+							player_connections[i].state = Disconnected;
+							game.RemoveTank();
+						}
+						else if (status == sf::Socket::Status::Error) {
+							sf::Socket::Status status = player_connections[i].player_socket->receive(packet);
+						}
+					}
+
 				}
 			}
 		}

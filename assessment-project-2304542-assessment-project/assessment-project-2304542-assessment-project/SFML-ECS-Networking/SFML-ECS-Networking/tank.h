@@ -20,9 +20,14 @@ public:
 	sf::Vector2f position = { 0.f, 0.f };
 	sf::Angle barrelRotation = sf::radians(0);
 	sf::Angle bodyRotation = sf::radians(0);
-	float bodyRotationAngle = bodyRotation.asRadians();
+	//float bodyRotationAngle = bodyRotation.asRadians();
 
-	
+
+	std::unique_ptr<sf::Sprite> body;
+	std::unique_ptr<sf::Sprite> barrel;
+
+	int playerID;
+
 
 	struct {
 		bool clockwise = false;
@@ -40,8 +45,7 @@ private:
 	// Temporary placeholder texture, make sue to replace before rendering the sprite.
 	//sf::Texture placeholder = sf::Texture(sf::Vector2u(1, 1));
 
-	std::unique_ptr<sf::Sprite> body;
-	std::unique_ptr<sf::Sprite> barrel;
+
 
 
 	float movementSpeed = 150.f;
