@@ -117,7 +117,7 @@ int main() {
 		}
 		// Packet to hold our updates.
 		sf::Packet packet;
-
+		sf::Packet player_packet;
 
 		if (is_observer) { // OBSERVER
 			// Socket for communication with player
@@ -249,6 +249,46 @@ int main() {
 
 					// Update game using message containing position and rotation
 					game.NetworkUpdate(dt, interpolated_msg);
+					
+					interpolated_msg.id = i;
+					
+
+					player_packet << interpolated_msg.time << interpolated_msg.position.x << interpolated_msg.position.y << rotationAngle << aimAngle << interpolated_msg.projectilePosition.x << interpolated_msg.projectilePosition.y;;
+
+					interpolated_msg.rotation = sf::radians(rotationAngle);
+					interpolated_msg.aim = sf::radians(aimAngle);
+					player_connections[i].inter_t = 0.f; // reset interpolation t value when we get a new message
+
+					// Add message to the message_history
+					player_connections[i].message_history.push_front(interpolated_msg); // newest message added to the front
+					if (player_connections[i].message_history.size() > MAX_HISTORY) {
+						player_connections[i].message_history.pop_back(); // remove the oldest message at the back
+					}
+					
+				}
+				if (send_timer >= send_rate) {
+
+					sf::Socket::Status status = player_socket->send(packet);
+					// FIXME: Send can fail, check for errors and adjust logic accordingly.
+					if (status == sf::Socket::Status::Done) {
+#ifdef DEBUG			
+						Utils::printMsg("Sent message to: "
+							+ player_socket->getRemoteAddress().value().toString()
+
+
+
+#endif // DEBUG		
+
+					}
+					else { // attempts to reconnect if observer leaves prematurely 
+						Utils::printMsg("Failed to send message to Observer", error);
+						is_connected = false;
+						game.RemoveTank();
+					}
+					// Reset timer after sending the message
+					send_timer = 0;
+
+
 				}
 			}
 		}
@@ -290,7 +330,7 @@ int main() {
 					for (int i = 0; i <= player_connections.size(); i++) {
 						game.AddTank(i, i, { 320, 240 });
 					}
-
+					
 				}
 				else {
 					Utils::printMsg("Failed to connect to observer. Will try again later.", MessageType::warning);
